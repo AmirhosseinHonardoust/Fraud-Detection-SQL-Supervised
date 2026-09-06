@@ -1,5 +1,5 @@
 pandas==3.0.2
-matplotlib==3.10.8
+matplotlib==3.11.1
 scikit-learn==1.8.0
 joblib==1.5.3
 # Pinned even though nothing here imports numpy directly: it's a transitive

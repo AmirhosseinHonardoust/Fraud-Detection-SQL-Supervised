@@ -1,5 +1,8 @@
 # Fraud Detection [SQL + Python (Supervised)]
 
+[![CI](https://github.com/AmirhosseinHonardoust/Fraud-Detection-SQL-Supervised/actions/workflows/ci.yml/badge.svg)](https://github.com/AmirhosseinHonardoust/Fraud-Detection-SQL-Supervised/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Predict fraudulent transactions using **SQL (SQLite)** for feature engineering and **Python** with Logistic Regression for supervised classification.
 
 ---
@@ -130,6 +133,10 @@ A curve closer to the top-left corner indicates stronger predictive performance.
 | **scikit-learn** | Model building and metrics |
 | **matplotlib** | Visualization |
 
+Exact versions are pinned in `requirements.txt` (runtime) and
+`requirements-dev.txt` (lint/type-check/test tooling) — these are the versions
+CI installs and the pipeline is verified against.
+
 ---
 
 ## Usage
@@ -144,16 +151,24 @@ python src/create_db.py --csv data/transactions_labeled.csv --db fraud.db
 python src/train_supervised.py --db fraud.db --sql src/queries.sql --outdir outputs
 ```
 
+Every path can also be set via environment variable instead of a flag:
+`FRAUD_CSV_PATH`, `FRAUD_DB_PATH`, `FRAUD_SQL_PATH`, `FRAUD_OUTDIR`. A flag
+always overrides the matching env var.
+
 ---
 
 ## Outputs
+
+Running the two commands above writes these files to `--outdir` (default
+`outputs/`). They are **not** committed to the repo — regenerate them locally,
+or download them from the `pipeline-outputs` artifact on any CI run.
 
 | File | Description |
 |------|--------------|
 | `metrics.json` | Model performance metrics |
 | `fraud_scores.csv` | Ranked transactions with fraud probability |
 | `fraud_summary.csv` | Aggregated user-level fraud summary |
-| `roc_curve.png` | ROC curve visualization |
+| `charts/roc_curve.png` | ROC curve visualization |
 
 ---
 
@@ -164,11 +179,15 @@ pip install -r requirements.txt -r requirements-dev.txt
 ruff check src tests
 black --check src tests
 mypy src
-pytest -q
+pytest -q          # runs with coverage, fails under 90%
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same four commands on every push and
-pull request.
+Optional: `pre-commit install` runs ruff/black/mypy automatically on each
+commit, using the same versions as CI (`.pre-commit-config.yaml`).
+
+CI (`.github/workflows/ci.yml`) runs the same checks on every push and pull
+request, then executes the full pipeline and uploads `outputs/` as a build
+artifact.
 
 ## Limitations
 

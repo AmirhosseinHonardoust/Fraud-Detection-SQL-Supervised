@@ -4,5 +4,15 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+.coverage
+htmlcov/
 venv/
 .venv/
+
+# Generated pipeline artifacts (run src/create_db.py + src/train_supervised.py
+# to regenerate; CI uploads them as a build artifact on every run).
+outputs/*.json
+outputs/*.csv
+outputs/charts/*.png
+!outputs/.gitkeep
+!outputs/charts/.gitkeep

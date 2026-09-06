@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 from pathlib import Path
 
@@ -35,8 +36,17 @@ def load_csv_to_db(csv_path: str | Path, db_path: str | Path) -> int:
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Load a labeled transactions CSV into SQLite")
-    ap.add_argument("--csv", required=True, help="Path to the transactions CSV")
-    ap.add_argument("--db", default="fraud.db", help="Path to the SQLite database to create")
+    ap.add_argument(
+        "--csv",
+        required=os.environ.get("FRAUD_CSV_PATH") is None,
+        default=os.environ.get("FRAUD_CSV_PATH"),
+        help="Path to the transactions CSV (env: FRAUD_CSV_PATH)",
+    )
+    ap.add_argument(
+        "--db",
+        default=os.environ.get("FRAUD_DB_PATH", "fraud.db"),
+        help="Path to the SQLite database to create (env: FRAUD_DB_PATH)",
+    )
     return ap.parse_args()
 
 

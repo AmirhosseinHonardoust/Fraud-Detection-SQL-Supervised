@@ -13,7 +13,7 @@ dependencies = [
     "pandas==3.0.2",
     "matplotlib==3.10.8",
     "scikit-learn==1.8.0",
-    "joblib==1.5.3",
+    "joblib==1.6.0",
     "numpy==2.4.6",
 ]
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -126,9 +127,21 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description="Supervised fraud detection (Logistic Regression) with SQL features"
     )
-    ap.add_argument("--db", default="fraud.db")
-    ap.add_argument("--sql", default="src/queries.sql")
-    ap.add_argument("--outdir", default="outputs")
+    ap.add_argument(
+        "--db",
+        default=os.environ.get("FRAUD_DB_PATH", "fraud.db"),
+        help="Path to the SQLite database (env: FRAUD_DB_PATH)",
+    )
+    ap.add_argument(
+        "--sql",
+        default=os.environ.get("FRAUD_SQL_PATH", "src/queries.sql"),
+        help="Path to the feature-engineering SQL file (env: FRAUD_SQL_PATH)",
+    )
+    ap.add_argument(
+        "--outdir",
+        default=os.environ.get("FRAUD_OUTDIR", "outputs"),
+        help="Directory to write metrics/scores/charts to (env: FRAUD_OUTDIR)",
+    )
     return ap.parse_args()
 
 

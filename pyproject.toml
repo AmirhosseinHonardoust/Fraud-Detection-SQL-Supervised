@@ -13,3 +13,13 @@ target-version = ["py311"]
 python_version = "3.11"
 ignore_missing_imports = true
 warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report=term-missing --cov-fail-under=90"
+
+[tool.coverage.run]
+branch = true

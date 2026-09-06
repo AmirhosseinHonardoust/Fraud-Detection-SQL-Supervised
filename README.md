@@ -64,28 +64,38 @@ fraud-detection-sql-supervised/
 
 ## SQL Feature Engineering
 
-Feature generation reuses the same structure as the unsupervised project.
+Every aggregate feature is **point-in-time**: it's computed only from a user's
+transactions *strictly before* the current one (via SQLite window functions
+with `ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING`). A transaction never
+sees its own amount or anything that happens later, which matches how a real
+fraud-scoring system would see data as it arrives.
 
 ```sql
-CREATE TEMP VIEW user_stats AS
-SELECT user_id, COUNT(*) AS tx_count, AVG(amount) AS avg_amount, SUM(amount) AS total_amount
-FROM transactions
-GROUP BY user_id;
-
-CREATE TEMP VIEW daily_user AS
-SELECT user_id, date, COUNT(*) AS daily_tx, SUM(amount) AS daily_amount
-FROM transactions
-GROUP BY user_id, date;
-
-SELECT t.tx_id, t.user_id, t.date, t.region, t.merchant, t.amount,
-       us.tx_count, us.avg_amount, us.total_amount,
-       COALESCE(du.daily_tx, 0) AS daily_tx,
-       COALESCE(du.daily_amount, 0.0) AS daily_amount,
-       t.label
+SELECT
+  t.tx_id, t.user_id, t.date, t.region, t.merchant, t.amount,
+  COALESCE(COUNT(t.amount) OVER user_hist, 0) AS tx_count,
+  COALESCE(AVG(t.amount) OVER user_hist, 0.0) AS avg_amount,
+  COALESCE(SUM(t.amount) OVER user_hist, 0.0) AS total_amount,
+  COALESCE(COUNT(t.amount) OVER daily_hist, 0) AS daily_tx,
+  COALESCE(SUM(t.amount) OVER daily_hist, 0.0) AS daily_amount,
+  t.label
 FROM transactions t
-LEFT JOIN user_stats us ON t.user_id = us.user_id
-LEFT JOIN daily_user du ON t.user_id = du.user_id AND t.date = du.date;
+WINDOW
+  user_hist AS (
+    PARTITION BY t.user_id ORDER BY t.date, t.tx_id
+    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+  ),
+  daily_hist AS (
+    PARTITION BY t.user_id, t.date ORDER BY t.tx_id
+    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+  )
+ORDER BY t.date, t.tx_id;
 ```
+
+An earlier version of this query aggregated over the *entire* dataset
+(including future transactions), which leaked information a live system
+would not have yet. See [Limitations](#limitations) for the measured impact
+of fixing this.
 
 ---
 
@@ -146,6 +156,34 @@ python src/train_supervised.py --db fraud.db --sql src/queries.sql --outdir outp
 | `roc_curve.png` | ROC curve visualization |
 
 ---
+
+## Development
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+ruff check src tests
+black --check src tests
+mypy src
+pytest -q
+```
+
+CI (`.github/workflows/ci.yml`) runs the same four commands on every push and
+pull request.
+
+## Limitations
+
+- **Small SQLite/logistic-regression pipeline**, not a production fraud
+  system. There's no online scoring, no model registry, no drift monitoring.
+- **Point-in-time features** (see above) replaced an earlier version that
+  aggregated over the whole dataset. On this dataset the practical effect on
+  reported metrics was small (AUC 0.913 → 0.915), but the fix matters for
+  correctness: the previous numbers would not have been achievable in a real
+  system scoring transactions as they arrive.
+- **Class imbalance** is real (625 fraud / 66,711 legitimate transactions).
+  `class_weight="balanced"` helps, but precision (~0.38) means most flagged
+  transactions are still false positives — expected at this level of
+  imbalance, but worth knowing before treating the scores as decisions rather
+  than a ranking to review.
 
 ## Conclusion
 

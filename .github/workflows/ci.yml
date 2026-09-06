@@ -26,5 +26,16 @@ jobs:
       - name: Type check (mypy)
         run: mypy src
 
-      - name: Tests
+      - name: Tests (with coverage, min 90%)
         run: pytest -q
+
+      - name: Run pipeline end-to-end
+        run: |
+          python src/create_db.py --csv data/transactions_labeled.csv --db fraud.db
+          python src/train_supervised.py --db fraud.db --sql src/queries.sql --outdir outputs
+
+      - name: Upload pipeline outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-outputs
+          path: outputs/

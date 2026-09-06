@@ -13,6 +13,8 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+from sklearn.base import ClassifierMixin
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support, roc_auc_score, roc_curve
 from sklearn.model_selection import train_test_split
@@ -29,6 +31,67 @@ logger = logging.getLogger(__name__)
 
 FEATURE_COLS = ["amount", "tx_count", "avg_amount", "total_amount", "daily_tx", "daily_amount"]
 
+MODEL_CHOICES = ("logreg", "random_forest")
+
+
+def _build_model(model: str, random_state: int) -> ClassifierMixin:
+    """Return an unfitted classifier for `model` (see MODEL_CHOICES).
+
+    `logreg` (the default) reproduces the exact estimator this project has
+    always used. `random_forest` is an opt-in alternative for comparison;
+    it is not a drop-in behavioral replacement, so it's never used unless
+    explicitly requested via `--model random_forest`.
+    """
+    if model == "logreg":
+        return LogisticRegression(max_iter=1000, class_weight="balanced")
+    if model == "random_forest":
+        return RandomForestClassifier(
+            n_estimators=200, class_weight="balanced", random_state=random_state
+        )
+    raise ValueError(f"Unknown model {model!r}; choose one of {MODEL_CHOICES}")
+
+
+def _strip_sql_line_comments(sql_text: str) -> str:
+    """Strip `-- ...` line comments before statement-splitting on `;`.
+
+    Only comments are handled here (a `--` outside a single-quoted string
+    truncates the rest of its line); a semicolon inside a string literal is
+    still not supported, since a full SQL tokenizer is out of scope for this
+    project's small, hand-authored `queries.sql`. This is enough to stop a
+    semicolon that merely appears in a *comment* from being mistaken for a
+    statement separator.
+    """
+    out_lines = []
+    for line in sql_text.splitlines():
+        in_string = False
+        cut = len(line)
+        i = 0
+        while i < len(line) - 1:
+            if line[i] == "'":
+                in_string = not in_string
+            elif not in_string and line[i : i + 2] == "--":
+                cut = i
+                break
+            i += 1
+        out_lines.append(line[:cut])
+    return "\n".join(out_lines)
+
+
+def _threshold_type(value: str) -> float:
+    parsed = float(value)
+    if not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError(f"--threshold must be between 0.0 and 1.0, got {parsed}")
+    return parsed
+
+
+def _test_size_type(value: str) -> float:
+    parsed = float(value)
+    if not 0.0 < parsed < 1.0:
+        raise argparse.ArgumentTypeError(
+            f"--test-size must be strictly between 0.0 and 1.0, got {parsed}"
+        )
+    return parsed
+
 
 def run_training(
     db_path: str | Path,
@@ -39,14 +102,19 @@ def run_training(
     test_size: float = 0.25,
     random_state: int = 42,
     save_model: str | Path | None = None,
+    model: str = "logreg",
 ) -> None:
-    """Run the SQL feature engineering + Logistic Regression training pipeline.
+    """Run the SQL feature engineering + supervised training pipeline.
 
     `threshold`, `test_size`, and `random_state` tune the split/classification
     decision without touching code. If `save_model` is given, the fitted
     scaler + classifier + feature list are persisted there via joblib so a
     later process can load them and score new transactions without retraining.
+    `model` selects the classifier (see MODEL_CHOICES); it defaults to
+    `"logreg"`, which reproduces this project's original behavior exactly.
     """
+    if model not in MODEL_CHOICES:
+        raise ValueError(f"Unknown model {model!r}; choose one of {MODEL_CHOICES}")
     db_path = Path(db_path)
     sql_path = Path(sql_path)
     if not db_path.is_file():
@@ -58,7 +126,7 @@ def run_training(
     charts_dir = ensure_outdir(Path(outdir) / "charts")
 
     # Read SQL and split into statements (setup views/CTEs + final SELECT).
-    sql_text = sql_path.read_text(encoding="utf-8")
+    sql_text = _strip_sql_line_comments(sql_path.read_text(encoding="utf-8"))
     statements = [s.strip() for s in sql_text.split(";") if s.strip()]
     if not statements:
         raise RuntimeError("No SQL statements found in queries.sql")
@@ -97,7 +165,7 @@ def run_training(
     X_train_s = scaler.fit_transform(X_train)
     X_test_s = scaler.transform(X_test)
 
-    clf = LogisticRegression(max_iter=1000, class_weight="balanced")
+    clf = _build_model(model, random_state)
     clf.fit(X_train_s, y_train)
 
     # Evaluate.
@@ -172,15 +240,16 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument(
         "--threshold",
-        type=float,
-        default=float(os.environ.get("FRAUD_THRESHOLD", "0.5")),
-        help="Probability threshold for the fraud/not-fraud decision (env: FRAUD_THRESHOLD)",
+        type=_threshold_type,
+        default=os.environ.get("FRAUD_THRESHOLD", "0.5"),
+        help="Probability threshold for the fraud/not-fraud decision, in [0, 1] "
+        "(env: FRAUD_THRESHOLD)",
     )
     ap.add_argument(
         "--test-size",
-        type=float,
-        default=float(os.environ.get("FRAUD_TEST_SIZE", "0.25")),
-        help="Fraction of data held out for evaluation (env: FRAUD_TEST_SIZE)",
+        type=_test_size_type,
+        default=os.environ.get("FRAUD_TEST_SIZE", "0.25"),
+        help="Fraction of data held out for evaluation, in (0, 1) (env: FRAUD_TEST_SIZE)",
     )
     ap.add_argument(
         "--random-state",
@@ -192,6 +261,14 @@ def parse_args() -> argparse.Namespace:
         "--save-model",
         default=os.environ.get("FRAUD_MODEL_PATH"),
         help="If set, path to persist the fitted scaler+model via joblib (env: FRAUD_MODEL_PATH)",
+    )
+    ap.add_argument(
+        "--model",
+        choices=MODEL_CHOICES,
+        default=os.environ.get("FRAUD_MODEL", "logreg"),
+        help="Classifier to train (env: FRAUD_MODEL). Default 'logreg' matches "
+        "this project's original behavior; 'random_forest' is an opt-in alternative "
+        "for comparison.",
     )
     return ap.parse_args()
 
@@ -206,6 +283,7 @@ def main() -> None:
         test_size=args.test_size,
         random_state=args.random_state,
         save_model=args.save_model,
+        model=args.model,
     )
 
 

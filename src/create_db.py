@@ -1,8 +1,50 @@
-import argparse, sqlite3, pandas as pd
+#!/usr/bin/env python3
+"""Load a labeled transactions CSV into a SQLite database."""
+
+from __future__ import annotations
+
+import argparse
+import sqlite3
 from pathlib import Path
-parser=argparse.ArgumentParser(); parser.add_argument('--csv',required=True); parser.add_argument('--db',default='fraud.db'); args=parser.parse_args()
-df=pd.read_csv(args.csv)
-with sqlite3.connect(args.db) as con:
- con.execute('CREATE TABLE IF NOT EXISTS transactions (tx_id INTEGER,user_id TEXT,date TEXT,region TEXT,merchant TEXT,amount REAL,label INTEGER)')
- df.to_sql('transactions',con,if_exists='replace',index=False)
-print('Loaded',args.csv,'->',args.db)
+
+import pandas as pd
+
+TABLE_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS transactions ("
+    "tx_id INTEGER, user_id TEXT, date TEXT, region TEXT, "
+    "merchant TEXT, amount REAL, label INTEGER)"
+)
+
+
+def load_csv_to_db(csv_path: str | Path, db_path: str | Path) -> int:
+    """Load `csv_path` into a `transactions` table in `db_path`.
+
+    Returns the number of rows loaded. Raises FileNotFoundError if
+    `csv_path` does not exist.
+    """
+    csv_path = Path(csv_path)
+    if not csv_path.is_file():
+        raise FileNotFoundError(f"CSV not found: {csv_path}")
+
+    df = pd.read_csv(csv_path)
+    with sqlite3.connect(db_path) as con:
+        con.execute(TABLE_SCHEMA)
+        df.to_sql("transactions", con, if_exists="replace", index=False)
+    return len(df)
+
+
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Load a labeled transactions CSV into SQLite")
+    ap.add_argument("--csv", required=True, help="Path to the transactions CSV")
+    ap.add_argument("--db", default="fraud.db", help="Path to the SQLite database to create")
+    return ap.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    n_rows = load_csv_to_db(args.csv, args.db)
+    print(f"Loaded {n_rows} rows: {args.csv} -> {args.db}")
+
+
+if __name__ == "__main__":
+    main()

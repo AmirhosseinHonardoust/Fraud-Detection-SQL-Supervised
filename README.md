@@ -155,6 +155,15 @@ Every path can also be set via environment variable instead of a flag:
 `FRAUD_CSV_PATH`, `FRAUD_DB_PATH`, `FRAUD_SQL_PATH`, `FRAUD_OUTDIR`. A flag
 always overrides the matching env var.
 
+`train_supervised.py` also accepts:
+
+| Flag | Env var | Default | Purpose |
+|------|---------|---------|---------|
+| `--threshold` | `FRAUD_THRESHOLD` | `0.5` | Probability cutoff for the fraud/not-fraud decision used in precision/recall/F1 |
+| `--test-size` | `FRAUD_TEST_SIZE` | `0.25` | Fraction of data held out for evaluation |
+| `--random-state` | `FRAUD_RANDOM_STATE` | `42` | Seed for the train/test split |
+| `--save-model` | `FRAUD_MODEL_PATH` | *(unset)* | If given, persists the fitted scaler + classifier + feature list to this path via `joblib`, so a later process can load it and score new transactions without retraining |
+
 ---
 
 ## Outputs
@@ -182,12 +191,16 @@ mypy src
 pytest -q          # runs with coverage, fails under 90%
 ```
 
+Or run the whole gate in one command: `make gate` (see `Makefile`; `make run`
+runs the pipeline end-to-end). See `CONTRIBUTING.md` for the full workflow.
+
 Optional: `pre-commit install` runs ruff/black/mypy automatically on each
 commit, using the same versions as CI (`.pre-commit-config.yaml`).
 
 CI (`.github/workflows/ci.yml`) runs the same checks on every push and pull
 request, then executes the full pipeline and uploads `outputs/` as a build
-artifact.
+artifact. Dependabot (`.github/dependabot.yml`) opens weekly PRs to keep
+pinned pip and GitHub Actions dependencies current.
 
 ## Limitations
 

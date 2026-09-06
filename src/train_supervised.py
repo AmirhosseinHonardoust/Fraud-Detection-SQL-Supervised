@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Train a supervised (Logistic Regression) fraud model on SQL-engineered features."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,6 +11,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import joblib
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support, roc_auc_score, roc_curve
@@ -27,7 +30,23 @@ logger = logging.getLogger(__name__)
 FEATURE_COLS = ["amount", "tx_count", "avg_amount", "total_amount", "daily_tx", "daily_amount"]
 
 
-def run_training(db_path: str | Path, sql_path: str | Path, outdir: str | Path) -> None:
+def run_training(
+    db_path: str | Path,
+    sql_path: str | Path,
+    outdir: str | Path,
+    *,
+    threshold: float = 0.5,
+    test_size: float = 0.25,
+    random_state: int = 42,
+    save_model: str | Path | None = None,
+) -> None:
+    """Run the SQL feature engineering + Logistic Regression training pipeline.
+
+    `threshold`, `test_size`, and `random_state` tune the split/classification
+    decision without touching code. If `save_model` is given, the fitted
+    scaler + classifier + feature list are persisted there via joblib so a
+    later process can load them and score new transactions without retraining.
+    """
     db_path = Path(db_path)
     sql_path = Path(sql_path)
     if not db_path.is_file():
@@ -70,7 +89,7 @@ def run_training(db_path: str | Path, sql_path: str | Path, outdir: str | Path) 
 
     # Train/test split.
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, random_state=42, stratify=y
+        X, y, test_size=test_size, random_state=random_state, stratify=y
     )
 
     # Scale + train.
@@ -85,7 +104,7 @@ def run_training(db_path: str | Path, sql_path: str | Path, outdir: str | Path) 
     proba = clf.predict_proba(X_test_s)[:, 1]
     auc = roc_auc_score(y_test, proba)
     precision, recall, f1, _ = precision_recall_fscore_support(
-        y_test, (proba > 0.5).astype(int), average="binary", zero_division=0
+        y_test, (proba > threshold).astype(int), average="binary", zero_division=0
     )
     fpr, tpr, _ = roc_curve(y_test, proba)
     plot_roc(fpr, tpr, charts_dir / "roc_curve.png")
@@ -120,6 +139,15 @@ def run_training(db_path: str | Path, sql_path: str | Path, outdir: str | Path) 
     )
     save_csv(summary, Path(outdir) / "fraud_summary.csv")
 
+    if save_model is not None:
+        save_model = Path(save_model)
+        save_model.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(
+            {"model": clf, "scaler": scaler, "feature_cols": FEATURE_COLS},
+            save_model,
+        )
+        logger.info("Model saved to: %s", save_model.resolve())
+
     logger.info("Artifacts saved to: %s", Path(outdir).resolve())
 
 
@@ -142,12 +170,43 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("FRAUD_OUTDIR", "outputs"),
         help="Directory to write metrics/scores/charts to (env: FRAUD_OUTDIR)",
     )
+    ap.add_argument(
+        "--threshold",
+        type=float,
+        default=float(os.environ.get("FRAUD_THRESHOLD", "0.5")),
+        help="Probability threshold for the fraud/not-fraud decision (env: FRAUD_THRESHOLD)",
+    )
+    ap.add_argument(
+        "--test-size",
+        type=float,
+        default=float(os.environ.get("FRAUD_TEST_SIZE", "0.25")),
+        help="Fraction of data held out for evaluation (env: FRAUD_TEST_SIZE)",
+    )
+    ap.add_argument(
+        "--random-state",
+        type=int,
+        default=int(os.environ.get("FRAUD_RANDOM_STATE", "42")),
+        help="Random seed for the train/test split (env: FRAUD_RANDOM_STATE)",
+    )
+    ap.add_argument(
+        "--save-model",
+        default=os.environ.get("FRAUD_MODEL_PATH"),
+        help="If set, path to persist the fitted scaler+model via joblib (env: FRAUD_MODEL_PATH)",
+    )
     return ap.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    run_training(args.db, args.sql, args.outdir)
+    run_training(
+        args.db,
+        args.sql,
+        args.outdir,
+        threshold=args.threshold,
+        test_size=args.test_size,
+        random_state=args.random_state,
+        save_model=args.save_model,
+    )
 
 
 if __name__ == "__main__":

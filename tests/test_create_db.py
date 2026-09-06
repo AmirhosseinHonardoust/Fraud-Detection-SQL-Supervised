@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import create_db
-from create_db import load_csv_to_db, parse_args
+from create_db import load_csv_to_db, parse_args, validate_columns
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,6 +39,26 @@ def test_load_csv_to_db_roundtrip(tmp_path):
 def test_load_csv_to_db_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_csv_to_db(tmp_path / "does_not_exist.csv", tmp_path / "out.db")
+
+
+def test_validate_columns_passes_with_all_required():
+    df = pd.DataFrame(
+        {c: [] for c in ["tx_id", "user_id", "date", "region", "merchant", "amount", "label"]}
+    )
+    validate_columns(df)  # should not raise
+
+
+def test_validate_columns_raises_on_missing():
+    df = pd.DataFrame({"tx_id": [1], "user_id": ["U1"]})
+    with pytest.raises(ValueError, match="missing required column"):
+        validate_columns(df)
+
+
+def test_load_csv_to_db_missing_column_raises(tmp_path):
+    csv_path = tmp_path / "bad.csv"
+    pd.DataFrame({"tx_id": [1], "user_id": ["U1"], "amount": [10.0]}).to_csv(csv_path, index=False)
+    with pytest.raises(ValueError, match="missing required column"):
+        load_csv_to_db(csv_path, tmp_path / "out.db")
 
 
 def test_parse_args_env_var_defaults(monkeypatch):

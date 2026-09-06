@@ -16,18 +16,36 @@ TABLE_SCHEMA = (
     "merchant TEXT, amount REAL, label INTEGER)"
 )
 
+REQUIRED_COLUMNS = ["tx_id", "user_id", "date", "region", "merchant", "amount", "label"]
+
+
+def validate_columns(df: pd.DataFrame) -> None:
+    """Raise ValueError if `df` is missing any column `queries.sql` expects.
+
+    Catches malformed/mismatched CSVs at load time instead of failing later
+    with a confusing SQL or training error.
+    """
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"CSV is missing required column(s): {missing}. "
+            f"Expected columns: {REQUIRED_COLUMNS}"
+        )
+
 
 def load_csv_to_db(csv_path: str | Path, db_path: str | Path) -> int:
     """Load `csv_path` into a `transactions` table in `db_path`.
 
     Returns the number of rows loaded. Raises FileNotFoundError if
-    `csv_path` does not exist.
+    `csv_path` does not exist, or ValueError if it's missing a required
+    column.
     """
     csv_path = Path(csv_path)
     if not csv_path.is_file():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
 
     df = pd.read_csv(csv_path)
+    validate_columns(df)
     with sqlite3.connect(db_path) as con:
         con.execute(TABLE_SCHEMA)
         df.to_sql("transactions", con, if_exists="replace", index=False)

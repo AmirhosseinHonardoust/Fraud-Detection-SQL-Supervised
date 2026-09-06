@@ -1,4 +1,4 @@
-pandas==3.0.2
+pandas==3.0.5
 matplotlib==3.10.8
 scikit-learn==1.8.0
 joblib==1.5.3

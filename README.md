@@ -1,6 +1,7 @@
 <div align="center">
 
 # Fraud Detection, SQL + Supervised ML
+<img width="1733" height="908" alt="Fraud-Detection-SQL-Supervised" src="https://github.com/user-attachments/assets/5a18aecb-2305-42dd-a754-70a850156831" />
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![SQLite](https://img.shields.io/badge/SQLite-Feature%20Engineering-003B57)

@@ -1,6 +1,6 @@
 <div align="center">
 
-# Fraud Detection [SQL + Python (Supervised)]
+# Fraud Detection, SQL + Supervised ML
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![SQLite](https://img.shields.io/badge/SQLite-Feature%20Engineering-003B57)

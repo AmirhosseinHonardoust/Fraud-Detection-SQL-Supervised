@@ -51,6 +51,11 @@ fraud-detection-sql-supervised/
 
 ---
 
+## Dataset
+
+`data/transactions_labeled.csv` is a synthetic dataset generated for this
+project; it does not contain real transactions or real users.
+
 ## Dataset Schema
 
 | Column | Description |
@@ -104,7 +109,8 @@ of fixing this.
 
 ## Machine Learning
 
-Model: **Logistic Regression**
+Model: **Logistic Regression** (default), with an opt-in **Random Forest**
+alternative via `--model random_forest` for comparison.
 
 - Trained on labeled transaction data  
 - Balanced class weights for rare fraud cases  
@@ -163,6 +169,14 @@ always overrides the matching env var.
 | `--test-size` | `FRAUD_TEST_SIZE` | `0.25` | Fraction of data held out for evaluation |
 | `--random-state` | `FRAUD_RANDOM_STATE` | `42` | Seed for the train/test split |
 | `--save-model` | `FRAUD_MODEL_PATH` | *(unset)* | If given, persists the fitted scaler + classifier + feature list to this path via `joblib`, so a later process can load it and score new transactions without retraining |
+| `--model` | `FRAUD_MODEL` | `logreg` | Classifier to train: `logreg` (default, matches this project's original behavior) or `random_forest` (opt-in alternative for comparison) |
+
+`--threshold` must be in `[0, 1]` and `--test-size` in `(0, 1)`; invalid values
+(from either the flag or the env var) fail fast with a clear error instead of
+a confusing error deep inside scikit-learn.
+
+`joblib.dump`/`joblib.load` use pickle under the hood: only load
+`--save-model` output you trust, the same as with any pickled model file.
 
 ---
 
@@ -190,6 +204,10 @@ black --check src tests
 mypy src
 pytest -q          # runs with coverage, fails under 90%
 ```
+
+The project is also pip-installable (`pip install -e .`), which exposes
+`fraud-create-db` and `fraud-train` console scripts equivalent to running
+`src/create_db.py` / `src/train_supervised.py` directly.
 
 Or run the whole gate in one command: `make gate` (see `Makefile`; `make run`
 runs the pipeline end-to-end). See `CONTRIBUTING.md` for the full workflow.

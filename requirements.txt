@@ -2,3 +2,9 @@ pandas==3.0.2
 matplotlib==3.10.8
 scikit-learn==1.8.0
 joblib==1.5.3
+# Pinned even though nothing here imports numpy directly: it's a transitive
+# dependency of pandas/scikit-learn, and numpy>=2.5 ships an inline stub
+# (numpy/__init__.pyi) that uses PEP 695 `type` statement syntax mypy rejects
+# under this project's `python_version = "3.11"` target. Without this pin,
+# an unrelated numpy patch release can turn CI red overnight.
+numpy==2.4.6
